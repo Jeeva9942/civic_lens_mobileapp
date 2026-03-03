@@ -87,7 +87,18 @@ const CommunityPage = () => {
 
           if (response.ok) {
             const data = await response.json();
-            estimates[report._id || report.id] = data.output.trim();
+            const rawOutput = data.output.trim();
+
+            // 🔍 SANITIZE AI OUTPUT
+            // If it's an error message or too long, fallback
+            const isError = rawOutput.toLowerCase().includes("error") ||
+              rawOutput.toLowerCase().includes("busy") ||
+              rawOutput.length > 50;
+
+            estimates[report._id || report.id] = isError ? "Estimated soon" : rawOutput;
+          } else {
+            // If response is not OK, set a default value
+            estimates[report._id || report.id] = "Estimated soon";
           }
         }
         setAiTimings(estimates);

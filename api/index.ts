@@ -34,10 +34,16 @@ const getSupabase = () => {
 
 // Health Check
 app.get('/api/health', (req, res) => {
+    const key = process.env.SUPABASE_KEY || '';
     res.json({
         status: 'ok',
-        supabase_configured: !!process.env.SUPABASE_URL,
-        using_wrong_key_format: (process.env.SUPABASE_KEY || '').includes('sb_secret')
+        supabase_url_set: !!process.env.SUPABASE_URL,
+        supabase_key_set: !!process.env.SUPABASE_KEY,
+        using_wrong_key_format: key.includes('sb_secret'),
+        key_preview: key ? `${key.substring(0, 5)}...` : 'not set',
+        tip: key.includes('sb_secret')
+            ? 'Switch to the "anon" key in Vercel settings. It should start with "eyJ".'
+            : 'If everything looks correct, ensure you redeployed after changing variables.'
     });
 });
 
@@ -110,30 +116,48 @@ app.post('/api/chat', async (req, res) => {
             body: JSON.stringify({ chatInput: message, sessionId }),
         });
 
+        const rawText = await response.text();
+
+        // 🚨 HANDLE QUOTA/API ERRORS GRACEFULLY
+        if (rawText.toLowerCase().includes("quota") || rawText.toLowerCase().includes("limit exceeded")) {
+            return res.json({ output: "AI is currently busy (Rate Limit). Please try again in a minute." });
+        }
+
         if (!response.ok) throw new Error(`AI Webhook Failed (${response.status})`);
 
-        const rawText = await response.text();
+        // 🔥 ROBUST PARSING FOR n8n STREAMING & JSON
         const lines = rawText.split("\n").filter(l => l.trim() !== "");
-
         let fullMessage = "";
+
         for (const line of lines) {
             try {
                 const parsed = JSON.parse(line);
-                if (parsed.type === "item" && parsed.content) fullMessage += parsed.content;
-            } catch (e) { }
-        }
-
-        if (!fullMessage) {
-            try {
-                const parsed = JSON.parse(rawText);
-                fullMessage = parsed.output || parsed.message || rawText;
-            } catch (k) {
-                fullMessage = rawText;
+                // Handle different n8n response formats
+                if (parsed.type === "item" && parsed.content) {
+                    fullMessage += parsed.content;
+                } else if (parsed.output || parsed.message) {
+                    fullMessage += (parsed.output || parsed.message);
+                }
+            } catch (e) {
+                // If it's not JSON, it might be raw text
+                if (!line.startsWith('{')) fullMessage += line;
             }
         }
 
-        res.json({ output: fullMessage });
+        // Fallback if fullMessage is still empty or looks like garbage
+        if (!fullMessage || fullMessage.startsWith('{"')) {
+            try {
+                // Try parsing the whole thing if it's a single block
+                const parsed = JSON.parse(rawText);
+                fullMessage = parsed.output || parsed.message || "I'm sorry, I couldn't process that.";
+            } catch (e) {
+                fullMessage = "The AI server is responding with an unknown format. Please check your n8n workflow.";
+            }
+        }
+
+        res.json({ output: fullMessage.trim() });
     } catch (err: any) {
+        console.error("Chat API Error:", err.message);
         res.status(500).json({ error: 'AI Error', detail: err.message });
     }
 });
