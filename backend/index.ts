@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || "5000", 10);
 
 // Middleware
 app.use(cors());
@@ -24,8 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// In-memory session history store for Gemini
-const sessionHistory: Record<string, Array<{ role: string; parts: { text: string }[] }>> = {};
+
 
 // API Routes
 
@@ -113,68 +112,67 @@ app.delete('/api/civic/:id', async (req, res) => {
     }
 });
 
-// Chat Route — Gemini 2.0 Flash
+// Chat Route — n8n Webhook
 app.post('/api/chat', async (req, res) => {
     try {
-        const { message, sessionId = "user_default" } = req.body;
+        const { message, sessionId = "user123" } = req.body;
 
         if (!message) {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "https://jeevan8n.app.n8n.cloud/webhook/42a2b362-592d-408a-a07c-c838a381756f/chat";
 
-        // Maintain per-session history
-        if (!sessionHistory[sessionId]) {
-            sessionHistory[sessionId] = [];
-        }
-
-        // Append user message to history
-        sessionHistory[sessionId].push({
-            role: "user",
-            parts: [{ text: message }]
-        });
-
-        const payload = {
-            system_instruction: {
-                parts: [{
-                    text: "You are CivicAssistant, a helpful AI assistant for the Civic Lens app. Help citizens report civic issues, track repairs, understand local government services, and answer questions about community problems like potholes, drainage, streetlights, flooding, and more. Be concise and helpful."
-                }]
-            },
-            contents: sessionHistory[sessionId]
-        };
-
-        const response = await fetch(GEMINI_API_URL, {
+        const response = await fetch(WEBHOOK_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                chatInput: message,
+                sessionId: sessionId,
+            }),
         });
 
         if (!response.ok) {
-            const errText = await response.text();
-            console.error("Gemini API error:", errText);
-            return res.status(response.status).json({ error: "Gemini API request failed" });
+            throw new Error(`n8n Webhook failed with status ${response.status}`);
         }
 
-        const data = await response.json();
-        const botReply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't generate a response.";
+        const rawText = await response.text();
 
-        // Append bot reply to session history
-        sessionHistory[sessionId].push({
-            role: "model",
-            parts: [{ text: botReply }]
-        });
+        // 🔥 Split streaming lines
+        const lines = rawText
+            .split("\n")
+            .filter((line) => line.trim() !== "");
 
-        // Trim history to prevent token overflow
-        if (sessionHistory[sessionId].length > 20) {
-            sessionHistory[sessionId] = sessionHistory[sessionId].slice(-20);
+        let fullMessage = "";
+
+        for (const line of lines) {
+            try {
+                const parsed = JSON.parse(line);
+
+                if (parsed.type === "item" && parsed.content) {
+                    fullMessage += parsed.content;
+                }
+            } catch (e) {
+                // Ignore non-JSON lines
+            }
         }
 
-        res.json({ output: botReply });
+        if (!fullMessage) {
+            // Fallback for non-streaming response or different format
+            try {
+                const parsed = JSON.parse(rawText);
+                fullMessage = parsed.output || parsed.message || rawText;
+            } catch (e) {
+                fullMessage = rawText;
+            }
+        }
+
+        res.json({ output: fullMessage });
     } catch (err) {
         console.error("Chatbot Error:", err);
-        res.status(500).json({ error: 'Failed to communicate with Gemini AI' });
+        res.status(500).json({ error: 'Failed to communicate with AI' });
     }
 });
 

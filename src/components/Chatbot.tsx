@@ -90,7 +90,7 @@ const Chatbot = () => {
                 initial={{ scale: 0 }}
                 animate={{ scale: isOpen ? 0 : 1 }}
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-20 right-5 md:bottom-6 md:right-6 w-14 h-14 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.3)] civic-gradient flex items-center justify-center z-[99999] text-white hover:shadow-[0_0_20px_rgba(0,0,0,0.4)]"
+                className="absolute bottom-20 right-4 w-14 h-14 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.3)] civic-gradient flex items-center justify-center z-[99999] text-white hover:shadow-[0_0_20px_rgba(0,0,0,0.4)]"
             >
                 <MessageSquare className="w-6 h-6" />
             </motion.button>
@@ -101,7 +101,7 @@ const Chatbot = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 20 }}
-                        className="fixed bottom-20 right-5 md:bottom-6 md:right-6 w-[320px] h-[400px] bg-card border rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.4)] z-[99999] flex flex-col overflow-hidden"
+                        className="absolute bottom-20 right-4 w-[320px] h-[400px] bg-card border rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.4)] z-[99999] flex flex-col overflow-hidden"
                     >
                         <div className="civic-gradient px-4 py-3 flex items-center justify-between text-white">
                             <div className="flex items-center gap-2">
