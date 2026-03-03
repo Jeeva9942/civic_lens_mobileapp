@@ -7,35 +7,47 @@ import { formatDistanceToNow } from 'date-fns';
 dotenv.config();
 
 const app = express();
-const apiRouter = Router();
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Supabase Connection Safety Guard
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+// Lazily-initialize Supabase with validation
+const getSupabase = () => {
+    const url = process.env.SUPABASE_URL || '';
+    const key = process.env.SUPABASE_KEY || '';
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('⚠️ Missing Supabase credentials. API will return errors until configured in Vercel.');
-}
+    if (!url || !key) {
+        throw new Error('Supabase URL or Key is missing. Please add them to Vercel Environment Variables.');
+    }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Safety warning for potential wrong key type
+    if (!key.startsWith('eyJ')) {
+        console.warn('⚠️ SUPABASE_KEY does not appear to be a JWT. Ensure you are using the "anon" or "service_role" key.');
+    }
 
-// --- API ROUTES (with /api prefix handled by router) ---
+    return createClient(url, key);
+};
 
-// Test Route
-apiRouter.get('/test', (req, res) => {
-    res.json({ message: 'API is healthy', time: new Date().toISOString() });
+const api = Router();
+
+// Health Check
+api.get('/health', (req, res) => {
+    res.json({
+        ok: true,
+        env: {
+            db: !!process.env.SUPABASE_URL,
+            ai: !!process.env.N8N_WEBHOOK_URL
+        }
+    });
 });
 
 // Fetch all civic issues
-apiRouter.get('/civic', async (req, res) => {
+api.get('/civic', async (req, res) => {
     try {
-        if (!SUPABASE_URL) throw new Error('Supabase URL not configured');
-        const { data: items, error } = await supabase
+        const client = getSupabase();
+        const { data: items, error } = await client
             .from('civic')
             .select('*')
             .order('createdAt', { ascending: false });
@@ -43,15 +55,16 @@ apiRouter.get('/civic', async (req, res) => {
         if (error) throw error;
         res.json(items || []);
     } catch (err: any) {
-        console.error('Fetch Error:', err.message);
-        res.status(500).json({ error: 'Failed to fetch civic items', detail: err.message });
+        console.error('Database Error:', err);
+        res.status(500).json({ error: 'Database Failed', detail: err.message || err });
     }
 });
 
 // Create a new civic issue
-apiRouter.post('/civic', async (req, res) => {
+api.post('/civic', async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const client = getSupabase();
+        const { data, error } = await client
             .from('civic')
             .insert([req.body])
             .select();
@@ -59,34 +72,31 @@ apiRouter.post('/civic', async (req, res) => {
         if (error) throw error;
         res.status(201).json(data[0]);
     } catch (err: any) {
-        console.error('Create Error:', err.message);
-        res.status(400).json({ error: 'Failed to create civic item', detail: err.message });
+        console.error('Insert Error:', err);
+        res.status(400).json({ error: 'Insert Failed', detail: err.message || err });
     }
 });
 
-// Intelligent Issue Processing
-apiRouter.post('/process-issue', (req, res) => {
+// Restore missing Process Issue route
+api.post('/process-issue', (req, res) => {
     try {
         const { title, description, location, status = "reported" } = req.body;
         const now = new Date();
-        const createdAt = now.toISOString();
-        const timeAgo = formatDistanceToNow(now, { addSuffix: true });
-
         res.json({
             title: title || "",
             description: description || "",
             location: location || "",
             status: status,
-            createdAt: createdAt,
-            timeAgo: timeAgo
+            createdAt: now.toISOString(),
+            timeAgo: formatDistanceToNow(now, { addSuffix: true })
         });
     } catch (err: any) {
-        res.status(500).json({ error: 'Processing error', detail: err.message });
+        res.status(500).json({ error: 'Processing Failed', detail: err.message });
     }
 });
 
-// Chat Route — n8n Webhook
-apiRouter.post('/chat', async (req, res) => {
+// Chat Route
+api.post('/chat', async (req, res) => {
     try {
         const { message, sessionId = "user123" } = req.body;
         if (!message) return res.status(400).json({ error: 'Message is required' });
@@ -99,10 +109,10 @@ apiRouter.post('/chat', async (req, res) => {
             body: JSON.stringify({ chatInput: message, sessionId: sessionId }),
         });
 
-        if (!response.ok) throw new Error(`n8n failed: ${response.status}`);
+        if (!response.ok) throw new Error(`AI Webhook Status ${response.status}`);
 
         const rawText = await response.text();
-        const lines = rawText.split("\n").filter((line) => line.trim() !== "");
+        const lines = rawText.split("\n").filter(l => l.trim() !== "");
 
         let fullMessage = "";
         for (const line of lines) {
@@ -116,24 +126,22 @@ apiRouter.post('/chat', async (req, res) => {
             try {
                 const parsed = JSON.parse(rawText);
                 fullMessage = parsed.output || parsed.message || rawText;
-            } catch (e) {
+            } catch (k) {
                 fullMessage = rawText;
             }
         }
 
         res.json({ output: fullMessage });
     } catch (err: any) {
-        console.error("Chatbot Error:", err.message);
-        res.status(500).json({ error: 'Failed to communicate with AI', detail: err.message });
+        console.error("Chat Error:", err);
+        res.status(500).json({ error: 'AI Offline', detail: err.message });
     }
 });
 
-// Apply the router to the app with /api prefix
-app.use('/api', apiRouter);
+// Final Middleware
+app.use('/api', api);
 
-// Fallback for non-API routes
-app.get('*', (req, res) => {
-    res.status(404).send('Civic Lens API Route Not Found');
-});
+// Support for local backend folder (if users hits root /api)
+app.get('/api', (req, res) => res.json({ message: 'Civic API is running' }));
 
 export default app;
