@@ -112,6 +112,32 @@ app.delete('/api/civic/:id', async (req, res) => {
     }
 });
 
+// Intelligent Issue Processing
+import { formatDistanceToNow } from 'date-fns';
+
+app.post('/api/process-issue', (req, res) => {
+    const { title, description, location, status = "reported" } = req.body;
+
+    // 1. Generate logical and realistic timestamp using system time
+    // 2. Accurate ISO format
+    const now = new Date();
+    const createdAt = now.toISOString();
+
+    // 3. Generate human-readable "time ago"
+    // 4. Logically calculated difference
+    const timeAgo = formatDistanceToNow(now, { addSuffix: true });
+
+    // 5. Return clean structured JSON as requested
+    res.json({
+        title: title || "",
+        description: description || "",
+        location: location || "",
+        status: status,
+        createdAt: createdAt,
+        timeAgo: timeAgo
+    });
+});
+
 // Chat Route — n8n Webhook
 app.post('/api/chat', async (req, res) => {
     try {

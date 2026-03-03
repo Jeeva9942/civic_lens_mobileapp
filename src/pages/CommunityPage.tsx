@@ -47,6 +47,8 @@ const CommunityPage = () => {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiTimings, setAiTimings] = useState<Record<string, string>>({});
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     const fetchReports = async () => {
@@ -55,10 +57,44 @@ const CommunityPage = () => {
         if (!response.ok) throw new Error('Failed to fetch reports');
         const data = await response.json();
         setReports(data);
+
+        if (data.length > 0) {
+          fetchAiEstimates(data);
+        }
       } catch (error) {
         console.error('Error fetching reports:', error);
       } finally {
         setLoading(false);
+      }
+    };
+
+    const fetchAiEstimates = async (allReports: any[]) => {
+      setAiLoading(true);
+      try {
+        // Only estimate for top 5 to avoid long wait
+        const topReports = allReports.slice(0, 5);
+        const estimates: Record<string, string> = {};
+
+        for (const report of topReports) {
+          const prompt = `Analyze this civic issue description: "${report.description}" (Category: ${report.category}). 
+          Based on its severity "${report.severity}", provide a 3-word approximate resolution timeline (e.g., "Fix in 2 days").`;
+
+          const response = await fetch("http://localhost:5000/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: prompt, sessionId: "ai_community_estimation" }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            estimates[report._id || report.id] = data.output.trim();
+          }
+        }
+        setAiTimings(estimates);
+      } catch (err) {
+        console.error("AI Community Error:", err);
+      } finally {
+        setAiLoading(false);
       }
     };
 
@@ -199,6 +235,11 @@ const CommunityPage = () => {
                       <p className="text-sm font-semibold text-foreground">{post.user.name}</p>
                       <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Clock className="w-2.5 h-2.5" /> {post.issue.time}
+                        {aiTimings[post.issue.id || post.issue._id] && (
+                          <span className="flex items-center gap-1 bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-bold text-[8px] ml-1">
+                            <Clock className="w-2 h-2" /> {aiTimings[post.issue.id || post.issue._id]}
+                          </span>
+                        )}
                       </p>
                     </div>
                     <Badge

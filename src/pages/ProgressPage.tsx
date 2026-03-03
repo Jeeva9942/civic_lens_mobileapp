@@ -24,7 +24,10 @@ const ProgressPage = () => {
     const [reports, setReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [aiTimings, setAiTimings] = useState<Record<string, string>>({});
     const [selectedIssue, setSelectedIssue] = useState<any>(null);
+    const [aiTiming, setAiTiming] = useState<string | null>(null);
+    const [aiLoadingDetail, setAiLoadingDetail] = useState(false);
 
     useEffect(() => {
         const fetchReports = async () => {
@@ -33,6 +36,10 @@ const ProgressPage = () => {
                 if (!response.ok) throw new Error('Failed to fetch reports');
                 const data = await response.json();
                 setReports(data || []);
+
+                if (data && data.length > 0) {
+                    fetchAiEstimates(data);
+                }
             } catch (error) {
                 console.error('Error fetching reports:', error);
             } finally {
@@ -40,8 +47,66 @@ const ProgressPage = () => {
             }
         };
 
+        const fetchAiEstimates = async (allReports: any[]) => {
+            try {
+                const activeOnes = allReports.filter(r => r.status !== 'Resolved' && r.status !== 'resolved').slice(0, 5);
+                const estimates: Record<string, string> = {};
+
+                for (const report of activeOnes) {
+                    const prompt = `Analyze this civic issue description: "${report.description}" (Category: ${report.category}). 
+                    Based on severity "${report.severity}", provide a tiny approximate resolution timeline (e.g., "Fix in 2d"). Only return the estimate.`;
+
+                    const response = await fetch("http://localhost:5000/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: prompt, sessionId: "ai_progress_list_estimation" }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        estimates[report._id || report.id] = data.output.trim();
+                    }
+                }
+                setAiTimings(estimates);
+            } catch (err) {
+                console.error("AI List Estimation Error:", err);
+            }
+        };
+
         fetchReports();
     }, []);
+
+    useEffect(() => {
+        if (!selectedIssue) {
+            setAiTiming(null);
+            return;
+        }
+
+        const fetchAiTiming = async () => {
+            setAiLoadingDetail(true);
+            try {
+                const prompt = `Analyze this civic issue description: "${selectedIssue.description}" (Category: ${selectedIssue.category}). 
+                Based on severity "${selectedIssue.severity}", provide a tiny approximate resolution timeline (e.g., "Fix in 2d"). Only return the estimate.`;
+
+                const response = await fetch("http://localhost:5000/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: prompt, sessionId: "progress_estimation" }),
+                });
+
+                if (!response.ok) throw new Error("AI failed");
+                const data = await response.json();
+                setAiTiming(data.output || "Unable to estimate at this time.");
+            } catch (err) {
+                console.error("AI Timing Error:", err);
+                setAiTiming("Estimation service temporarily unavailable.");
+            } finally {
+                setAiLoadingDetail(false);
+            }
+        };
+
+        fetchAiTiming();
+    }, [selectedIssue]);
 
     const filteredReports = reports.filter(report =>
         report.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -109,6 +174,7 @@ const ProgressPage = () => {
                                                 status={report.status || 'Reported'}
                                                 severity={report.severity || 'medium'}
                                                 time={report.createdAt ? new Date(report.createdAt).toLocaleDateString() : 'Today'}
+                                                aiTiming={aiTimings[report._id || report.id]}
                                                 onClick={() => setSelectedIssue(report)}
                                             />
                                         </motion.div>
@@ -230,6 +296,32 @@ const ProgressPage = () => {
                                                         </div>
                                                     </div>
                                                 ))}
+
+                                                {/* AI Timing Estimation Section */}
+                                                <div className="mt-8 pt-6 border-t border-dashed">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                                                            <Clock className="w-3.5 h-3.5 text-primary" />
+                                                        </div>
+                                                        <h4 className="text-xs font-bold text-foreground">AI Timeline Analysis</h4>
+                                                    </div>
+
+                                                    {aiLoadingDetail ? (
+                                                        <div className="flex items-center gap-3 p-4 bg-secondary/10 rounded-2xl animate-pulse">
+                                                            <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                                            <p className="text-[10px] text-muted-foreground">Calculating estimated resolution time...</p>
+                                                        </div>
+                                                    ) : aiTiming && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, x: -10 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            className="p-4 bg-primary/5 rounded-2xl border border-primary/10"
+                                                        >
+                                                            <p className="text-sm font-semibold text-primary">{aiTiming}</p>
+                                                            <p className="text-[10px] text-muted-foreground mt-1 underline decoration-primary/20 decoration-dotted">Based on typical civic maintenance cycles for this category and severity.</p>
+                                                        </motion.div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </TabsContent>
 

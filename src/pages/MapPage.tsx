@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Layers, Filter, Flame, MapPin, Loader2, X, Calendar, AlertTriangle, Droplets, Lightbulb, TreePine, Construction, Waves, Route, Building2, MessageSquare, Info, History } from "lucide-react";
+import { Layers, Filter, Flame, MapPin, Loader2, X, Calendar, AlertTriangle, Droplets, Lightbulb, TreePine, Construction, Waves, Route, Building2, MessageSquare, Info, History, Clock } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -80,6 +80,8 @@ const MapPage = () => {
   const [filterCategory, setFilterCategory] = useState<CategoryKey | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<any>(null);
+  const [aiTiming, setAiTiming] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -111,6 +113,39 @@ const MapPage = () => {
 
     fetchReports();
   }, []);
+
+  useEffect(() => {
+    if (!selectedIssue) {
+      setAiTiming(null);
+      return;
+    }
+
+    const fetchAiTiming = async () => {
+      setAiLoading(true);
+      try {
+        const prompt = `Analyze this civic issue description: "${selectedIssue.description}" (Category: ${selectedIssue.category}). 
+                Based on its severity (${selectedIssue.severity}), provide a brief approximate resolution timeline (e.g., 'Estimated resolution: 3-5 business days'). 
+                Mention a one-sentence reason based on typical maintenance cycles.`;
+
+        const response = await fetch("http://localhost:5000/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: prompt, sessionId: "map_estimation" }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setAiTiming(data.output.trim());
+        }
+      } catch (err) {
+        console.error("Map AI Timing Error:", err);
+      } finally {
+        setAiLoading(false);
+      }
+    };
+
+    fetchAiTiming();
+  }, [selectedIssue]);
 
   const filteredIssues = useMemo(() => {
     return filterCategory
@@ -162,11 +197,12 @@ const MapPage = () => {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
             )}
+
             <SatelliteToggle satellite={satellite} />
 
             {filteredIssues.map((issue) => (
               <Marker
-                key={issue.id}
+                key={issue.id || issue._id}
                 position={[issue.lat, issue.lng]}
                 icon={createCategoryIcon(issue.category as CategoryKey, issue.severity)}
                 eventHandlers={{
@@ -390,22 +426,48 @@ const MapPage = () => {
                     <TabsContent value="timeline" className="mt-0">
                       <div className="space-y-4">
                         {[
-                          { status: "Reported", time: "Just now", active: true },
-                          { status: "Under Review", time: "Pending", active: false },
-                          { status: "Assigned", time: "Pending", active: false },
-                          { status: "Resolved", time: "Pending", active: false }
+                          { status: "Reported", time: selectedIssue.time, active: true, done: true },
+                          { status: "Under Review", time: "Pending", active: selectedIssue.status === 'Reported', done: selectedIssue.status !== 'Reported' },
+                          { status: "Assigned", time: "Pending", active: selectedIssue.status === 'In Progress' || selectedIssue.status === 'in-progress', done: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved' },
+                          { status: "Resolved", time: "Pending", active: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved', done: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved' }
                         ].map((step, idx) => (
                           <div key={idx} className="flex gap-4 items-start">
                             <div className="flex flex-col items-center">
-                              <div className={`w-3 h-3 rounded-full mt-1.5 ${step.active ? 'bg-primary' : 'bg-muted'}`} />
-                              {idx < 3 && <div className="w-0.5 h-12 bg-muted my-1" />}
+                              <div className={`w-3 h-3 rounded-full mt-1.5 ${step.done ? 'bg-success' : step.active ? 'bg-primary ring-2 ring-primary/20' : 'bg-muted'}`} />
+                              {idx < 3 && <div className={`w-0.5 h-12 ${step.done ? 'bg-success' : 'bg-muted'} my-1`} />}
                             </div>
                             <div>
-                              <p className={`text-sm font-bold ${step.active ? 'text-foreground' : 'text-muted-foreground'}`}>{step.status}</p>
+                              <p className={`text-sm font-bold ${step.done || step.active ? 'text-foreground' : 'text-muted-foreground'}`}>{step.status}</p>
                               <p className="text-[10px] text-muted-foreground">{step.time}</p>
                             </div>
                           </div>
                         ))}
+
+                        {/* AI Timing Estimation Section */}
+                        <div className="mt-6 pt-4 border-t border-dashed">
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Clock className="w-3 h-3 text-primary" />
+                            </div>
+                            <h4 className="text-[10px] font-bold text-foreground">AI Resolution Insight</h4>
+                          </div>
+
+                          {aiLoading ? (
+                            <div className="flex items-center gap-2 p-3 bg-secondary/10 rounded-xl animate-pulse">
+                              <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                              <p className="text-[9px] text-muted-foreground">Analyzing resolution window...</p>
+                            </div>
+                          ) : aiTiming && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="p-3 bg-primary/5 rounded-xl border border-primary/10"
+                            >
+                              <p className="text-xs font-bold text-primary">{aiTiming}</p>
+                              <p className="text-[9px] text-muted-foreground mt-1">Based on local maintenance benchmarks.</p>
+                            </motion.div>
+                          )}
+                        </div>
                       </div>
                     </TabsContent>
 

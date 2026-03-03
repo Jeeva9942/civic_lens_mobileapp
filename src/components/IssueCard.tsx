@@ -11,6 +11,7 @@ interface IssueCardProps {
   time: string;
   status: string;
   severity: "low" | "medium" | "high";
+  aiTiming?: string;
   onClick?: () => void;
 }
 
@@ -29,7 +30,7 @@ const severityStyles = {
   high: "bg-destructive/10 text-destructive",
 };
 
-const IssueCard = ({ category, description, location, time, status, severity, onClick }: IssueCardProps) => {
+const IssueCard = ({ category, description, location, time, status, severity, aiTiming, onClick }: IssueCardProps) => {
   const { t } = useTranslation();
   const cat = categories[category] || categories.pothole;
   const Icon = cat.icon;
@@ -37,8 +38,17 @@ const IssueCard = ({ category, description, location, time, status, severity, on
   return (
     <div
       onClick={onClick}
-      className={`bg-card rounded-2xl p-4 border border-border shadow-sm ${onClick ? 'cursor-pointer hover:border-primary/30' : ''} transition-all`}
+      className={`bg-card rounded-2xl p-4 border border-border shadow-sm ${onClick ? 'cursor-pointer hover:border-primary/30' : ''} transition-all relative overflow-hidden`}
     >
+      {/* AI Timing Overlay for Activity View */}
+      {aiTiming && (
+        <div className="absolute top-0 right-0">
+          <div className="bg-primary/10 text-primary text-[9px] font-bold px-3 py-1 rounded-bl-xl border-l border-b border-primary/20 flex items-center gap-1.5 backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-500">
+            <Clock className="w-2.5 h-2.5" />
+            {aiTiming}
+          </div>
+        </div>
+      )}
       <div className="flex items-start gap-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cat.bg} ${cat.color} shrink-0`}>
           <Icon className="w-5 h-5" />

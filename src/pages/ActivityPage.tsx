@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { FileText, ThumbsUp, Eye } from "lucide-react";
+import { FileText, ThumbsUp, Eye, Clock, Plus } from "lucide-react";
 import IssueCard from "@/components/IssueCard";
 import { mockIssues } from "@/data/mockIssues";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,10 +47,10 @@ const ActivityPage = () => {
           <TabsList className="w-full bg-secondary rounded-xl p-1 h-auto">
             <TabsTrigger
               value="reports"
-              className="flex-1 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs font-semibold py-2.5"
+              className="flex-1 rounded-lg data-[state=active]:bg-card data-[state=active]:shadow-sm text-xs font-semibold py-2.5 center-report"
             >
-              <FileText className="w-4 h-4 mr-1.5" />
-              My Reports
+              <Plus className="w-4 h-4 mr-1.5" />
+              Report Issue
             </TabsTrigger>
             <TabsTrigger
               value="validations"
@@ -72,12 +72,15 @@ const ActivityPage = () => {
             <div className="flex flex-col gap-3">
               {myReports.map((issue, i) => (
                 <motion.div
-                  key={issue.id}
+                  key={issue.id || issue._id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
+                  className="relative"
                 >
-                  <IssueCard {...issue} />
+                  <IssueCard
+                    {...issue}
+                  />
                 </motion.div>
               ))}
             </div>
