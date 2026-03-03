@@ -12,6 +12,7 @@ import {
   SheetContent,
 } from "@/components/ui/sheet";
 import LanguageSelector from "@/components/LanguageSelector";
+import NotificationBell from "@/components/NotificationBell";
 import { useTranslation } from "@/context/TranslationContext";
 
 const categoryKeys: CategoryKey[] = [
@@ -80,14 +81,17 @@ const HomePage = () => {
             </Button>
           </motion.div>
 
-          <LanguageSelector />
+          <div className="flex gap-2">
+            <NotificationBell />
+            <LanguageSelector />
+          </div>
 
           <div className="absolute right-4 bottom-4 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
         </div>
 
         {/* Stats overlay */}
         <div className="px-4 -mt-10 relative z-10">
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <StatCard icon={FileWarning} label="Open" value={openCount} variant="warning" />
             <StatCard icon={Clock} label="In Progress" value={inProgressCount} variant="primary" />
             <StatCard icon={CheckCircle2} label="Resolved" value={resolvedCount} variant="success" />

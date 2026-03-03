@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LanguageSelector from "@/components/LanguageSelector";
+import NotificationBell from "@/components/NotificationBell";
 import { useTranslation } from "@/context/TranslationContext";
 
 const severityColors: Record<string, string> = {
@@ -124,7 +125,10 @@ const ProgressPage = () => {
                     <h1 className="text-xl font-bold text-primary-foreground">{t('track_progress')}</h1>
                     <p className="text-primary-foreground/70 text-sm mt-1">Real-time status of civic fixes</p>
                 </div>
-                <LanguageSelector />
+                <div className="flex gap-2">
+                    <NotificationBell />
+                    <LanguageSelector />
+                </div>
             </div>
 
             <div className="px-5 -mt-6">
@@ -272,9 +276,24 @@ const ProgressPage = () => {
                                             <div className="space-y-6">
                                                 {[
                                                     { status: t("reported"), time: selectedIssue.createdAt ? new Date(selectedIssue.createdAt).toLocaleDateString() : 'Just now', active: true, done: true },
-                                                    { status: t("verified_categorized"), time: "Pending", active: selectedIssue.status === 'Reported', done: selectedIssue.status !== 'Reported' },
-                                                    { status: t("assigned"), time: "Pending", active: selectedIssue.status === 'In Progress' || selectedIssue.status === 'in-progress', done: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved' },
-                                                    { status: t("completed"), time: "Pending", active: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved', done: selectedIssue.status === 'Resolved' || selectedIssue.status === 'resolved' }
+                                                    {
+                                                        status: t("verified_categorized"),
+                                                        time: selectedIssue.verifiedAt ? new Date(selectedIssue.verifiedAt).toLocaleDateString() : "Pending",
+                                                        active: ['Reported', 'reported', 'open'].includes(selectedIssue.status),
+                                                        done: !['Reported', 'reported', 'open'].includes(selectedIssue.status)
+                                                    },
+                                                    {
+                                                        status: t("assigned"),
+                                                        time: selectedIssue.assignedAt ? new Date(selectedIssue.assignedAt).toLocaleDateString() : "Pending",
+                                                        active: ['In Progress', 'in-progress'].includes(selectedIssue.status),
+                                                        done: ['Resolved', 'resolved'].includes(selectedIssue.status)
+                                                    },
+                                                    {
+                                                        status: t("completed"),
+                                                        time: selectedIssue.resolvedAt ? new Date(selectedIssue.resolvedAt).toLocaleDateString() : "Pending",
+                                                        active: ['Resolved', 'resolved'].includes(selectedIssue.status),
+                                                        done: ['Resolved', 'resolved'].includes(selectedIssue.status)
+                                                    }
                                                 ].map((step, idx) => (
                                                     <div key={idx} className="flex gap-4 items-start">
                                                         <div className="flex flex-col items-center">
@@ -296,6 +315,20 @@ const ProgressPage = () => {
                                                         </div>
                                                     </div>
                                                 ))}
+
+                                                {selectedIssue.adminRemarks && (
+                                                    <div className="mt-4 p-4 bg-yellow-50 rounded-2xl border border-yellow-200">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="w-5 h-5 rounded-md bg-yellow-400 flex items-center justify-center text-white">
+                                                                <MessageSquare className="w-3 h-3" />
+                                                            </div>
+                                                            <p className="text-xs font-bold text-yellow-800">Admin Remark</p>
+                                                        </div>
+                                                        <p className="text-xs text-yellow-700 leading-relaxed italic">
+                                                            "{selectedIssue.adminRemarks}"
+                                                        </p>
+                                                    </div>
+                                                )}
 
                                                 {/* AI Timing Estimation Section */}
                                                 <div className="mt-8 pt-6 border-t border-dashed">
