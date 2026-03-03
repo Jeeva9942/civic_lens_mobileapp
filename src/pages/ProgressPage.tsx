@@ -32,7 +32,7 @@ const ProgressPage = () => {
     useEffect(() => {
         const fetchReports = async () => {
             try {
-                const response = await fetch('http://localhost:5000/api/civic');
+                const response = await fetch('/api/civic');
                 if (!response.ok) throw new Error('Failed to fetch reports');
                 const data = await response.json();
                 setReports(data || []);
@@ -56,7 +56,7 @@ const ProgressPage = () => {
                     const prompt = `Analyze this civic issue description: "${report.description}" (Category: ${report.category}). 
                     Based on severity "${report.severity}", provide a tiny approximate resolution timeline (e.g., "Fix in 2d"). Only return the estimate.`;
 
-                    const response = await fetch("http://localhost:5000/api/chat", {
+                    const response = await fetch("/api/chat", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ message: prompt, sessionId: "ai_progress_list_estimation" }),
@@ -88,7 +88,7 @@ const ProgressPage = () => {
                 const prompt = `Analyze this civic issue description: "${selectedIssue.description}" (Category: ${selectedIssue.category}). 
                 Based on severity "${selectedIssue.severity}", provide a tiny approximate resolution timeline (e.g., "Fix in 2d"). Only return the estimate.`;
 
-                const response = await fetch("http://localhost:5000/api/chat", {
+                const response = await fetch("/api/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ message: prompt, sessionId: "progress_estimation" }),

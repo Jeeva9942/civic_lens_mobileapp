@@ -13,7 +13,7 @@ const ActivityPage = () => {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/civic');
+        const response = await fetch('/api/civic');
         if (!response.ok) throw new Error('Failed to fetch reports');
         const data = await response.json();
         const transformedData = data.map((item: any) => ({

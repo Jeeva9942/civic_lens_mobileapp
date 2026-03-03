@@ -88,7 +88,7 @@ const MapPage = () => {
   useEffect(() => {
     const fetchReports = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/civic');
+        const response = await fetch('/api/civic');
         if (!response.ok) throw new Error('Failed to fetch reports');
         const data = await response.json();
 
@@ -127,7 +127,7 @@ const MapPage = () => {
                 Based on its severity (${selectedIssue.severity}), provide a brief approximate resolution timeline (e.g., 'Estimated resolution: 3-5 business days'). 
                 Mention a one-sentence reason based on typical maintenance cycles.`;
 
-        const response = await fetch("http://localhost:5000/api/chat", {
+        const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: prompt, sessionId: "map_estimation" }),

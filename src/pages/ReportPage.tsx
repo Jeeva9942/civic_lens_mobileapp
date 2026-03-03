@@ -78,7 +78,7 @@ const ReportPage = () => {
         image: imagePreview
       };
 
-      const response = await fetch('http://localhost:5000/api/civic', {
+      const response = await fetch('/api/civic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
