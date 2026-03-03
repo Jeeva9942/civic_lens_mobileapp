@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+import twilio from 'twilio';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -23,6 +25,21 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Twilio Configuration
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_FLOW_SID = process.env.TWILIO_FLOW_SID || "";
+const TWILIO_FROM = process.env.TWILIO_FROM || "";
+
+const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+
+// Google Gemini Configuration
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// In-memory conversation history
+const chatHistories: Record<string, any[]> = {};
 
 
 
@@ -138,7 +155,38 @@ app.post('/api/process-issue', (req, res) => {
     });
 });
 
-// Chat Route — n8n Webhook
+// Trigger Twilio Studio Flow for Alerts
+app.post('/api/trigger-alert', async (req, res) => {
+    const { phoneNumber } = req.body;
+    try {
+        console.log(`🔔 Triggering Flow for: ${phoneNumber}`);
+        const execution = await twilioClient.studio.v2
+            .flows(TWILIO_FLOW_SID)
+            .executions
+            .create({
+                to: phoneNumber,
+                from: TWILIO_FROM
+            });
+
+        console.log("✅ Flow triggered successfully! SID:", execution.sid);
+
+        // Also create an in-app notification about this alert
+        await supabase
+            .from('notifications')
+            .insert([{
+                type: 'emergency_alert',
+                message: `An emergency priority call has been triggered. Account connected to the number +91 99423 73735.`,
+                created_at: new Date().toISOString()
+            }]);
+
+        res.json({ success: true, sid: execution.sid });
+    } catch (error: any) {
+        console.error("❌ Twilio Error:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Chat Route — Direct Gemini API
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionId = "user123" } = req.body;
@@ -147,65 +195,43 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "https://jeevan8n.app.n8n.cloud/webhook/42a2b362-592d-408a-a07c-c838a381756f/chat";
+        // Initialize history if it doesn't exist
+        if (!chatHistories[sessionId]) {
+            chatHistories[sessionId] = [];
+        }
 
-        const response = await fetch(WEBHOOK_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
+        const chat = model.startChat({
+            history: chatHistories[sessionId],
+            generationConfig: {
+                maxOutputTokens: 500,
             },
-            body: JSON.stringify({
-                chatInput: message,
-                sessionId: sessionId,
-            }),
         });
 
-        if (!response.ok) {
-            throw new Error(`n8n Webhook failed with status ${response.status}`);
+        const result = await chat.sendMessage(message);
+        const response = await result.response;
+        const text = response.text();
+
+        // Update history
+        chatHistories[sessionId].push(
+            { role: "user", parts: [{ text: message }] },
+            { role: "model", parts: [{ text: text }] }
+        );
+
+        // Keep history manageable
+        if (chatHistories[sessionId].length > 20) {
+            chatHistories[sessionId] = chatHistories[sessionId].slice(-20);
         }
 
-        const rawText = await response.text();
+        res.json({ output: text });
 
-        // 🔥 Split streaming lines
-        const lines = rawText
-            .split("\n")
-            .filter((line) => line.trim() !== "");
-
-        let fullMessage = "";
-
-        for (const line of lines) {
-            try {
-                const parsed = JSON.parse(line);
-
-                if (parsed.type === "item" && parsed.content) {
-                    fullMessage += parsed.content;
-                }
-            } catch (e) {
-                // Ignore non-JSON lines
-            }
-        }
-
-        if (!fullMessage) {
-            // Fallback for non-streaming response or different format
-            try {
-                const parsed = JSON.parse(rawText);
-                fullMessage = parsed.output || parsed.message || rawText;
-            } catch (e) {
-                fullMessage = rawText;
-            }
-        }
-
-        res.json({ output: fullMessage });
-    } catch (err) {
-        console.error("Chatbot Error:", err);
-        res.status(500).json({ error: 'Failed to communicate with AI' });
+    } catch (error: any) {
+        console.error("❌ Gemini Error:", error.message);
+        res.status(500).json({ error: "Civic Assistant is currently offline.", details: error.message });
     }
 });
 
-app.get('/', (req, res) => {
-    res.send('Civic Lens API is running');
-});
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

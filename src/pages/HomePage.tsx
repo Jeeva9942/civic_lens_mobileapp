@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, FileWarning, CheckCircle2, Clock, AlertCircle, Loader2, X, Calendar, MapPin } from "lucide-react";
+import { ArrowRight, FileWarning, CheckCircle2, Clock, AlertCircle, Loader2, X, Calendar, MapPin, Zap, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import StatCard from "@/components/StatCard";
@@ -63,12 +63,13 @@ const HomePage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            className="flex-1 min-w-0 pr-4"
           >
             <p className="text-primary-foreground/70 text-sm font-medium">{t('welcome')} 👋</p>
-            <h1 className="text-2xl font-bold text-primary-foreground mt-1">
+            <h1 className="text-2xl font-bold text-primary-foreground mt-1 truncate">
               {t('hero_title')}
             </h1>
-            <p className="text-primary-foreground/80 text-sm mt-2 max-w-xs">
+            <p className="text-primary-foreground/80 text-sm mt-2 max-w-xs line-clamp-2">
               {t('hero_desc')}
             </p>
             <Button
@@ -81,7 +82,13 @@ const HomePage = () => {
             </Button>
           </motion.div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => navigate("/profile")}
+              className="p-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all"
+            >
+              <User className="w-5 h-5" />
+            </button>
             <NotificationBell />
             <LanguageSelector />
           </div>
@@ -97,6 +104,27 @@ const HomePage = () => {
             <StatCard icon={CheckCircle2} label="Resolved" value={resolvedCount} variant="success" />
           </div>
         </div>
+      </div>
+
+      {/* AI Smart Audit Link */}
+      <div className="px-5 mt-8">
+        <motion.div
+          className="bg-indigo-600 rounded-[32px] p-5 text-white shadow-xl shadow-indigo-500/20 relative overflow-hidden"
+        >
+          <div className="relative z-10 flex items-center justify-between">
+            <div className="flex-1">
+              <Badge className="mb-2 bg-white/20 border-0 text-[10px] uppercase tracking-widest font-bold">New Technology</Badge>
+              <h3 className="text-xl font-bold">AI Smart Audit</h3>
+              <p className="text-indigo-100 text-xs mt-1 max-w-[180px]">Instant object detection & civic analysis powered by Edge AI.</p>
+            </div>
+            <div className="w-16 h-16 rounded-3xl bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
+              <Zap className="w-8 h-8 text-white fill-white" />
+            </div>
+          </div>
+          {/* Abstract circles */}
+          <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/5 rounded-full blur-2xl" />
+          <div className="absolute -left-2 top-0 w-16 h-16 bg-white/10 rounded-full blur-xl" />
+        </motion.div>
       </div>
 
       {/* Categories */}

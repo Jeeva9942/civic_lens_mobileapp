@@ -12,6 +12,7 @@ import ProgressPage from "./pages/ProgressPage";
 import ActivityPage from "./pages/ActivityPage";
 import CommunityPage from "./pages/CommunityPage";
 import ProfilePage from "./pages/ProfilePage";
+import VisionPage from "./pages/VisionPage";
 import NotFound from "./pages/NotFound";
 import Chatbot from "./components/Chatbot";
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/activity" element={<ActivityPage />} />
               <Route path="/community" element={<CommunityPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/vision" element={<VisionPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
             <BottomNav />

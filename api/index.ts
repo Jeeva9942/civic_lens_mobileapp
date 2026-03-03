@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { formatDistanceToNow } from 'date-fns';
+import twilio from 'twilio';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -29,6 +31,23 @@ const getSupabase = () => {
 
     return createClient(url, key);
 };
+
+// Twilio Configuration
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+const TWILIO_FLOW_SID = process.env.TWILIO_FLOW_SID || "";
+const TWILIO_FROM = process.env.TWILIO_FROM || "";
+
+const getTwilioClient = () => {
+    return twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+};
+
+// Google Gemini Configuration
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// In-memory conversation history (volatile on serverless, but works for single session)
+const chatHistories: Record<string, any[]> = {};
 
 // --- DIRECT ROUTES ---
 
@@ -68,6 +87,26 @@ app.get('/api/civic', async (req, res) => {
     }
 });
 
+// Fetch all notifications
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const client = getSupabase();
+        const { data: items, error } = await client
+            .from('notifications')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(items || []);
+    } catch (err: any) {
+        console.error('Notification Fetch Error:', err.message);
+        res.status(500).json({
+            error: 'Notification Fetch Failed',
+            detail: err.message
+        });
+    }
+});
+
 // Create a new civic issue
 app.post('/api/civic', async (req, res) => {
     try {
@@ -102,63 +141,78 @@ app.post('/api/process-issue', (req, res) => {
     }
 });
 
-// Chat Route
+// Trigger Twilio Studio Flow for Alerts
+app.post('/api/trigger-alert', async (req, res) => {
+    const { phoneNumber } = req.body;
+    try {
+        const client = getSupabase();
+        const twilioClient = getTwilioClient();
+
+        console.log(`🔔 Triggering Flow for: ${phoneNumber}`);
+        const execution = await twilioClient.studio.v2
+            .flows(TWILIO_FLOW_SID)
+            .executions
+            .create({
+                to: phoneNumber,
+                from: TWILIO_FROM
+            });
+
+        // Also create an in-app notification about this alert
+        await client
+            .from('notifications')
+            .insert([{
+                type: 'emergency_alert',
+                message: `An emergency priority call has been triggered. Account connected to the number +91 99423 73735.`,
+                created_at: new Date().toISOString()
+            }]);
+
+        res.json({ success: true, sid: execution.sid });
+    } catch (error: any) {
+        console.error("❌ Twilio Error:", error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Chat Route — Direct Gemini API
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionId = "user123" } = req.body;
-        const WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || "";
 
-        if (!WEBHOOK_URL) throw new Error('N8N_WEBHOOK_URL is not set.');
+        if (!message) {
+            return res.status(400).json({ error: 'Message is required' });
+        }
 
-        const response = await fetch(WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chatInput: message, sessionId }),
+        // Initialize history if it doesn't exist
+        if (!chatHistories[sessionId]) {
+            chatHistories[sessionId] = [];
+        }
+
+        const chat = model.startChat({
+            history: chatHistories[sessionId],
+            generationConfig: {
+                maxOutputTokens: 500,
+            },
         });
 
-        const rawText = await response.text();
+        const result = await chat.sendMessage(message);
+        const response = await result.response;
+        const text = response.text();
 
-        // 🚨 HANDLE QUOTA/API ERRORS GRACEFULLY
-        if (rawText.toLowerCase().includes("quota") || rawText.toLowerCase().includes("limit exceeded")) {
-            return res.json({ output: "AI is currently busy (Rate Limit). Please try again in a minute." });
+        // Update history
+        chatHistories[sessionId].push(
+            { role: "user", parts: [{ text: message }] },
+            { role: "model", parts: [{ text: text }] }
+        );
+
+        if (chatHistories[sessionId].length > 10) {
+            chatHistories[sessionId] = chatHistories[sessionId].slice(-10);
         }
 
-        if (!response.ok) throw new Error(`AI Webhook Failed (${response.status})`);
+        res.json({ output: text });
 
-        // 🔥 ROBUST PARSING FOR n8n STREAMING & JSON
-        const lines = rawText.split("\n").filter(l => l.trim() !== "");
-        let fullMessage = "";
-
-        for (const line of lines) {
-            try {
-                const parsed = JSON.parse(line);
-                // Handle different n8n response formats
-                if (parsed.type === "item" && parsed.content) {
-                    fullMessage += parsed.content;
-                } else if (parsed.output || parsed.message) {
-                    fullMessage += (parsed.output || parsed.message);
-                }
-            } catch (e) {
-                // If it's not JSON, it might be raw text
-                if (!line.startsWith('{')) fullMessage += line;
-            }
-        }
-
-        // Fallback if fullMessage is still empty or looks like garbage
-        if (!fullMessage || fullMessage.startsWith('{"')) {
-            try {
-                // Try parsing the whole thing if it's a single block
-                const parsed = JSON.parse(rawText);
-                fullMessage = parsed.output || parsed.message || "I'm sorry, I couldn't process that.";
-            } catch (e) {
-                fullMessage = "The AI server is responding with an unknown format. Please check your n8n workflow.";
-            }
-        }
-
-        res.json({ output: fullMessage.trim() });
-    } catch (err: any) {
-        console.error("Chat API Error:", err.message);
-        res.status(500).json({ error: 'AI Error', detail: err.message });
+    } catch (error: any) {
+        console.error("❌ Gemini Error:", error.message);
+        res.status(500).json({ error: "Assistant currently offline.", details: error.message });
     }
 });
 

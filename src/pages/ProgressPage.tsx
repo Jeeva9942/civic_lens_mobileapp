@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Clock, CheckCircle2, AlertCircle, Loader2, Search, X, Calendar, MapPin, History, Info, MessageSquare } from "lucide-react";
+import { Clock, CheckCircle2, AlertCircle, Loader2, Search, X, Calendar, MapPin, History, Info, MessageSquare, User } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import IssueCard from "@/components/IssueCard";
 import { categories, type CategoryKey } from "@/components/CategoryIcon";
@@ -29,6 +30,14 @@ const ProgressPage = () => {
     const [selectedIssue, setSelectedIssue] = useState<any>(null);
     const [aiTiming, setAiTiming] = useState<string | null>(null);
     const [aiLoadingDetail, setAiLoadingDetail] = useState(false);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+    const queryParams = new URLSearchParams(location.search);
+    const initialReportId = queryParams.get('id');
+    const initialTab = queryParams.get('tab') || 'timeline';
+
+    const [activeTab, setActiveTab] = useState(initialTab);
 
     useEffect(() => {
         const fetchReports = async () => {
@@ -77,6 +86,17 @@ const ProgressPage = () => {
         fetchReports();
     }, []);
 
+    // Handle deep linking
+    useEffect(() => {
+        if (reports.length > 0 && initialReportId) {
+            const found = reports.find(r => (r._id || r.id) === initialReportId);
+            if (found) {
+                setSelectedIssue(found);
+                setActiveTab(initialTab);
+            }
+        }
+    }, [reports, initialReportId, initialTab]);
+
     useEffect(() => {
         if (!selectedIssue) {
             setAiTiming(null);
@@ -121,11 +141,17 @@ const ProgressPage = () => {
         <div className="pb-24 min-h-screen bg-background">
             {/* Header */}
             <div className="civic-gradient px-5 pt-12 pb-8 flex justify-between items-start">
-                <div>
-                    <h1 className="text-xl font-bold text-primary-foreground">{t('track_progress')}</h1>
-                    <p className="text-primary-foreground/70 text-sm mt-1">Real-time status of civic fixes</p>
+                <div className="flex-1 min-w-0 pr-4">
+                    <h1 className="text-xl font-bold text-primary-foreground truncate">{t('track_progress')}</h1>
+                    <p className="text-primary-foreground/70 text-sm mt-1 line-clamp-1">Real-time status of civic fixes</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        onClick={() => navigate("/profile")}
+                        className="p-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all"
+                    >
+                        <User className="w-5 h-5" />
+                    </button>
                     <NotificationBell />
                     <LanguageSelector />
                 </div>
@@ -255,7 +281,7 @@ const ProgressPage = () => {
                             </div>
 
                             <div className="flex-1 overflow-hidden flex flex-col p-6">
-                                <Tabs defaultValue="timeline" className="flex-1 flex flex-col">
+                                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
                                     <TabsList className="grid grid-cols-3 w-full mb-6 bg-secondary/30 h-11 p-1 rounded-xl">
                                         <TabsTrigger value="timeline" className="rounded-lg text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                                             <History className="w-3.5 h-3.5 mr-1.5" />
@@ -384,10 +410,55 @@ const ProgressPage = () => {
                                         </TabsContent>
 
                                         <TabsContent value="activity" className="mt-0">
-                                            <div className="text-center py-20 bg-secondary/10 rounded-3xl border border-dashed border-border px-6">
-                                                <MessageSquare className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
-                                                <h3 className="text-sm font-bold text-foreground">Community Hub</h3>
-                                                <p className="text-xs text-muted-foreground mt-2">Connect with neighbors and municipal workers about this specific issue.</p>
+                                            <div className="space-y-4">
+                                                {selectedIssue.reply ? (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        className="p-4 rounded-2xl bg-primary/5 border border-primary/10"
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold">A</div>
+                                                            <p className="text-xs font-bold text-foreground">Official Reply from Admin</p>
+                                                        </div>
+                                                        <p className="text-sm text-foreground/80 leading-relaxed italic ml-8">
+                                                            "{selectedIssue.reply}"
+                                                        </p>
+                                                    </motion.div>
+                                                ) : (
+                                                    <div className="text-center py-10 bg-secondary/10 rounded-3xl border border-dashed border-border px-6">
+                                                        <MessageSquare className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+                                                        <h3 className="text-xs font-bold text-foreground">Awaiting Response</h3>
+                                                        <p className="text-[10px] text-muted-foreground mt-1">Municipal workers will post updates here soon.</p>
+                                                    </div>
+                                                )}
+
+                                                {selectedIssue.ai_analysis && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 10 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ delay: 0.1 }}
+                                                        className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100"
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+                                                                <Clock className="w-3 h-3" />
+                                                            </div>
+                                                            <p className="text-xs font-bold text-indigo-700">AI Intelligent Audit</p>
+                                                        </div>
+                                                        <p className="text-xs text-indigo-600 leading-relaxed">
+                                                            {selectedIssue.ai_analysis}
+                                                        </p>
+                                                        {selectedIssue.priority_level && (
+                                                            <div className="mt-3 flex items-center gap-2">
+                                                                <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">Score: {selectedIssue.priority_score?.toFixed(1) || 'N/A'}</span>
+                                                                <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200 text-[10px] py-0 px-2">
+                                                                    Priority: {selectedIssue.priority_level}
+                                                                </Badge>
+                                                            </div>
+                                                        )}
+                                                    </motion.div>
+                                                )}
                                             </div>
                                         </TabsContent>
                                     </div>

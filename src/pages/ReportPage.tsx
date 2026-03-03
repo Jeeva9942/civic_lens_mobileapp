@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, MapPin, Send, ChevronLeft, Upload, AlertTriangle } from "lucide-react";
+import { Camera, MapPin, Send, ChevronLeft, Upload, AlertTriangle, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import CategoryIcon, { type CategoryKey, categories } from "@/components/CategoryIcon";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useTranslation } from "@/context/TranslationContext";
+import * as tf from "@tensorflow/tfjs";
+import * as cocoSsd from "@tensorflow-models/coco-ssd";
 
 const categoryKeys: CategoryKey[] = [
   "pothole", "drainage", "streetlight", "vegetation",
@@ -19,6 +21,22 @@ const severityLevels = [
   { key: "high", label: "High", color: "bg-destructive/10 text-destructive border-destructive/30" },
 ];
 
+const CIVIC_WHITELIST = [
+  "person", "bicycle", "car", "motorcycle", "bus", "truck",
+  "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "dog"
+];
+
+const categoryMessages: Record<CategoryKey, string> = {
+  pothole: "🚧 Pothole: A road surface defect has been identified, causing uneven driving conditions and potential safety risks for vehicles and pedestrians. The pothole appears to have developed due to wear, water seepage, or poor maintenance. Immediate inspection is recommended to prevent further road damage. Temporary warning signage may be required until repairs are completed.",
+  drainage: "💧 Drainage: A drainage issue has been detected in the area, potentially affecting proper water flow. Blocked or damaged drains may lead to water accumulation during rainfall. This could increase the risk of flooding and road deterioration. Maintenance teams should assess and clear the drainage system promptly.",
+  streetlight: "💡 Streetlight: A malfunctioning or non-operational streetlight has been observed at the location. Reduced visibility during nighttime may pose safety concerns for pedestrians and drivers. The issue could be due to electrical faults or bulb failure. Technical inspection and timely replacement are advised.",
+  vegetation: "🌿 Vegetation: Overgrown vegetation has been noticed encroaching into public pathways or road areas. This may obstruct visibility and restrict pedestrian or vehicle movement. Uncontrolled plant growth can also affect nearby infrastructure. Trimming and regular maintenance are recommended.",
+  construction: "🚧 Construction: Ongoing or incomplete construction activity has been reported in the vicinity. Debris or improper barricading may create hazards for commuters. The site requires proper safety measures and clear signage. Authorities should ensure compliance with safety regulations.",
+  flooding: "🌊 Flooding: Signs of water accumulation or flooding have been identified in the area. This may disrupt traffic flow and damage nearby infrastructure. The issue could be linked to heavy rainfall or poor drainage systems. Immediate water clearance and preventive measures are necessary.",
+  encroachment: "📌 Encroachment: An unauthorized encroachment has been detected occupying public space. This may obstruct movement and affect planned infrastructure usage. The situation requires verification against municipal regulations. Appropriate legal and administrative action may be needed.",
+  sewage: "🚰 Sewage: A possible sewage-related issue has been observed, such as leakage or overflow. This can create unhygienic conditions and health risks for nearby residents. The problem may stem from pipeline blockage or damage. Urgent inspection and repair are recommended to restore sanitation."
+};
+
 const ReportPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -30,6 +48,12 @@ const ReportPage = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number }>({ lat: 12.9716, lng: 77.5946 });
   const [locating, setLocating] = useState(false);
+
+  // TFJS Model State
+  const [model, setModel] = useState<cocoSsd.ObjectDetection | null>(null);
+  const [modelLoading, setModelLoading] = useState(true);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -52,13 +76,77 @@ const ReportPage = () => {
         }
       );
     }
+
+    // Load TFJS Model
+    const loadModel = async () => {
+      try {
+        await tf.ready();
+        const loadedModel = await cocoSsd.load({ base: 'mobilenet_v2' });
+        setModel(loadedModel);
+        setModelLoading(false);
+      } catch (err) {
+        console.error("TFJS Load Error:", err);
+        setModelLoading(false);
+      }
+    };
+    loadModel();
   }, []);
+
+  const [analyzing, setAnalyzing] = useState(false);
+  const [noIssueFound, setNoIssueFound] = useState(false);
+
+  // Helper to draw boxes on image preview
+  const drawBoxes = (predictions: any[]) => {
+    const canvas = canvasRef.current;
+    const img = imageRef.current;
+    if (!canvas || !img) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = img.clientWidth;
+    canvas.height = img.clientHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    predictions.forEach(p => {
+      const [x, y, width, height] = p.bbox;
+      const xFactor = canvas.width / img.naturalWidth;
+      const yFactor = canvas.height / img.naturalHeight;
+
+      ctx.strokeStyle = "#4f46e5"; // Indigo
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x * xFactor, y * yFactor, width * xFactor, height * yFactor);
+
+      ctx.fillStyle = "#4f46e5";
+      ctx.font = "bold 10px Inter";
+      ctx.fillText(`${p.class} ${(p.score * 100).toFixed(0)}%`, x * xFactor, y * yFactor - 5);
+    });
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        setImagePreview(base64);
+
+        // --- SIMULATED PROCESSING ---
+        setAnalyzing(true);
+        setNoIssueFound(false);
+
+        // Wait for exactly 4 seconds as requested
+        setTimeout(() => {
+          setAnalyzing(false);
+          const msg = selectedCategory ? categoryMessages[selectedCategory] : categoryMessages.pothole;
+          setDescription(msg);
+
+          toast({
+            title: "Processing Complete ✨",
+            description: "Evidence successfully archived.",
+          });
+        }, 4000);
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -111,7 +199,9 @@ const ReportPage = () => {
           <button onClick={() => (step > 0 ? setStep(step - 1) : navigate("/"))} className="text-primary-foreground">
             <ChevronLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-bold text-primary-foreground">{t('report_issue')}</h1>
+          <div className="flex-1">
+            <h1 className="text-lg font-bold text-primary-foreground">{t('report_issue')}</h1>
+          </div>
         </div>
         {/* Progress */}
         <div className="flex gap-2 mt-4">
@@ -171,16 +261,40 @@ const ReportPage = () => {
             <label className="block mb-5 cursor-pointer">
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
               {imagePreview ? (
-                <div className="relative rounded-2xl overflow-hidden h-48">
-                  <img src={imagePreview} alt="Issue" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-foreground/20 flex items-center justify-center">
-                    <Camera className="w-8 h-8 text-primary-foreground" />
+                <div className="relative rounded-2xl overflow-hidden min-h-[200px] h-auto">
+                  <img
+                    ref={imageRef}
+                    src={imagePreview}
+                    alt="Issue"
+                    className="w-full h-full object-contain bg-secondary/20"
+                  />
+                  <div className="absolute inset-0 bg-foreground/10 flex flex-col items-center justify-center gap-2 pointer-events-none">
+                    {analyzing ? (
+                      <>
+                        <Loader2 className="w-8 h-8 text-white animate-spin" />
+                        <span className="text-xs text-white font-bold bg-indigo-600 px-3 py-1 rounded-full shadow-lg">Analyzing the images...</span>
+                      </>
+                    ) : noIssueFound ? (
+                      <>
+                        <AlertTriangle className="w-8 h-8 text-white" />
+                        <span className="text-xs text-white font-bold bg-destructive px-4 py-1.5 rounded-full shadow-lg animate-bounce">No issue found</span>
+                      </>
+                    ) : (
+                      <div className="absolute top-3 right-3 p-2 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-white pointer-events-auto">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="h-48 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 bg-secondary/50">
-                  <Upload className="w-8 h-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground font-medium">Tap to upload photo</span>
+                <div className="h-48 rounded-2xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 bg-secondary/50 shadow-inner">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+                    <Upload className={`w-6 h-6 ${analyzing ? 'animate-bounce' : ''}`} />
+                  </div>
+                  <span className="text-sm font-bold text-foreground">
+                    {analyzing ? 'Processing...' : 'Upload Audit Evidence'}
+                  </span>
+                  <p className="text-[10px] text-muted-foreground">Municipal processing will verify the issue</p>
                 </div>
               )}
             </label>

@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import LanguageSelector from "@/components/LanguageSelector";
+import NotificationBell from "@/components/NotificationBell";
+import { User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface CommunityPost {
   issue: any;
@@ -42,6 +45,7 @@ const mockComments = [
 ];
 
 const CommunityPage = () => {
+  const navigate = useNavigate();
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
@@ -154,7 +158,16 @@ const CommunityPage = () => {
           </div>
           <p className="text-primary-foreground/70 text-sm">See what others are reporting</p>
         </div>
-        <LanguageSelector />
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => navigate("/profile")}
+            className="p-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all"
+          >
+            <User className="w-5 h-5" />
+          </button>
+          <NotificationBell />
+          <LanguageSelector />
+        </div>
       </div>
 
       {/* Stats bar */}

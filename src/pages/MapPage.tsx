@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LanguageSelector from "@/components/LanguageSelector";
+import NotificationBell from "@/components/NotificationBell";
 import { useTranslation } from "@/context/TranslationContext";
+import { User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // Fix default marker icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -75,6 +78,7 @@ const SatelliteToggle = ({ satellite }: { satellite: boolean }) => {
 
 const MapPage = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [satellite, setSatellite] = useState(false);
   const [filterCategory, setFilterCategory] = useState<CategoryKey | null>(null);
@@ -168,7 +172,16 @@ const MapPage = () => {
           <h1 className="text-lg font-bold text-primary-foreground">{t('geo_intel')}</h1>
           <p className="text-primary-foreground/70 text-sm">Real-time civic status mapping</p>
         </div>
-        <LanguageSelector />
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => navigate("/profile")}
+            className="p-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all"
+          >
+            <User className="w-5 h-5" />
+          </button>
+          <NotificationBell />
+          <LanguageSelector />
+        </div>
       </div>
 
       {/* Leaflet Map */}

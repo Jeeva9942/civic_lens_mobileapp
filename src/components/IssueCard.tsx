@@ -38,38 +38,47 @@ const IssueCard = ({ category, description, location, time, status, severity, ai
   return (
     <div
       onClick={onClick}
-      className={`bg-card rounded-2xl p-4 border border-border shadow-sm ${onClick ? 'cursor-pointer hover:border-primary/30' : ''} transition-all relative overflow-hidden`}
+      className={`bg-card rounded-3xl p-5 border border-border shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary/20 hover:-translate-y-0.5' : ''} transition-all relative overflow-hidden group`}
     >
-      {/* AI Timing Overlay for Activity View */}
-      {aiTiming && (
-        <div className="absolute top-0 right-0">
-          <div className="bg-primary/10 text-primary text-[9px] font-bold px-3 py-1 rounded-bl-xl border-l border-b border-primary/20 flex items-center gap-1.5 backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-500">
-            <Clock className="w-2.5 h-2.5" />
-            {aiTiming}
-          </div>
+      <div className="flex items-start gap-4">
+        {/* Left Icon */}
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${cat.bg} ${cat.color} shrink-0 shadow-sm transition-transform group-hover:scale-110`}>
+          <Icon className="w-6 h-6" />
         </div>
-      )}
-      <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${cat.bg} ${cat.color} shrink-0`}>
-          <Icon className="w-5 h-5" />
-        </div>
+
+        {/* Center Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-sm text-foreground truncate">{t(category)}</h3>
-            <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${statusStyles[status] || statusStyles.open}`}>
-              {t(status)}
-            </Badge>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-base text-foreground truncate leading-tight">{t(category)}</h3>
+              <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{description || 'No description provided'}</p>
+            </div>
+
+            {/* Badges Stack */}
+            <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5">
+              <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-bold h-6 border-0 ${statusStyles[status] || statusStyles.open}`}>
+                {t(status)}
+              </Badge>
+              {aiTiming && (
+                <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/10 border-0 text-[10px] font-bold h-6 flex items-center gap-1 px-2.5">
+                  <Clock className="w-3 h-3" />
+                  {aiTiming}
+                </Badge>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{description}</p>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <MapPin className="w-3 h-3" /> {location}
-            </span>
-            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              <Clock className="w-3 h-3" /> {time}
-            </span>
-            <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ml-auto border-0 ${severityStyles[severity]}`}>
-              {t(severity)}
+
+          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-dashed border-border/50">
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground max-w-[150px]">
+              <MapPin className="w-3.5 h-3.5 text-primary/60" />
+              <span className="truncate">{location}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Clock className="w-3.5 h-3.5 text-primary/60" />
+              <span>{time}</span>
+            </div>
+            <Badge variant="secondary" className={`text-[10px] px-2 py-0.5 ml-auto border-0 font-bold tracking-tight ${severityStyles[severity]}`}>
+              {t(severity).toUpperCase()}
             </Badge>
           </div>
         </div>
