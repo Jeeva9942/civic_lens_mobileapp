@@ -1,0 +1,9 @@
+{
+  "projectId": "9408110b-649d-4ec9-a3d8-4e2d86227bb1",
+  "createdAt": 1772557595766,
+  "startupCommands": [
+    "npm install; npm run dev",
+    "cd backend; bun install; bun run dev"
+  ],
+  "templateId": "any"
+}
