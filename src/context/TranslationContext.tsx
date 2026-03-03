@@ -17,11 +17,11 @@ const translations: Translations = {
         ta: "மீண்டும் வருக",
     },
     hero_title: {
-        en: "CivicConnect",
-        kn: "ಸಿವಿಕ್ ಕನೆಕ್ಟ್",
-        hi: "सिविक कनेक्ट",
-        te: "సివిక్ కనెక్ట్",
-        ta: "சிவிக் கனெக்ட்",
+        en: "Civic Lens",
+        kn: "ಸಿವಿಕ್ ಲೆನ್ಸ್",
+        hi: "सिविक लेंस",
+        te: "సివిక్ లెన్స్",
+        ta: "சிவிக் லென்ஸ்",
     },
     hero_desc: {
         en: "Help improve your city. Report civic issues and track their resolution.",

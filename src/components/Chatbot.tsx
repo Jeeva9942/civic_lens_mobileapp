@@ -86,12 +86,12 @@ const Chatbot = () => {
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-[99999] pointer-events-none">
-            <div className="max-w-lg mx-auto relative h-[80px] pointer-events-auto">
+            <div className="max-w-lg mx-auto relative h-[80px]">
                 <motion.button
                     initial={{ scale: 0 }}
                     animate={{ scale: isOpen ? 0 : 1 }}
                     onClick={() => setIsOpen(true)}
-                    className="absolute bottom-20 right-4 w-14 h-14 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] civic-gradient flex items-center justify-center text-white hover:shadow-[0_4px_25px_rgba(0,0,0,0.4)] transition-shadow"
+                    className="absolute bottom-28 right-4 w-14 h-14 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] civic-gradient flex items-center justify-center text-white hover:shadow-[0_4px_25px_rgba(0,0,0,0.4)] transition-shadow pointer-events-auto"
                 >
                     <MessageSquare className="w-6 h-6" />
                 </motion.button>
@@ -102,7 +102,7 @@ const Chatbot = () => {
                             initial={{ opacity: 0, y: 20, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                            className="absolute bottom-20 right-4 w-[320px] h-[480px] bg-card border border-border rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden pointer-events-auto backdrop-blur-md"
+                            className="absolute bottom-28 right-4 w-[320px] h-[480px] bg-card border border-border rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.4)] flex flex-col overflow-hidden pointer-events-auto backdrop-blur-md"
                         >
                             <div className="civic-gradient px-4 py-3.5 flex items-center justify-between text-white">
                                 <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ const Chatbot = () => {
                                         <Bot className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <h3 className="font-bold text-sm leading-none">CivicAssistant</h3>
+                                        <h3 className="font-bold text-sm leading-none">Civic Lens Assistant</h3>
                                         <p className="text-[10px] text-white/70 mt-1 flex items-center gap-1">
                                             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" /> Online
                                         </p>
