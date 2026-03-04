@@ -105,6 +105,9 @@ const NotificationBell = () => {
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
                 <SheetContent side="right" className="w-[300px] sm:w-[380px] p-0 rounded-l-3xl border-l-0">
                     <div className="flex flex-col h-full bg-background">
+                        <SheetHeader className="sr-only">
+                            <SheetTitle>Notifications</SheetTitle>
+                        </SheetHeader>
                         <div className="civic-gradient px-6 py-8 text-white rounded-bl-3xl flex items-center justify-between">
                             <div>
                                 <h2 className="text-xl font-bold flex items-center gap-2">

@@ -55,12 +55,24 @@ const Chatbot = () => {
                 }
             );
 
+            const contentType = response.headers.get("content-type");
+            const isJson = contentType && contentType.includes("application/json");
+
             if (!response.ok) {
-                throw new Error("Server not responding");
+                const errorMsg = isJson
+                    ? (await response.json()).details || "Server error"
+                    : `Server error (${response.status})`;
+                throw new Error(errorMsg);
+            }
+
+            if (!isJson) {
+                const text = await response.text();
+                console.error("Non-JSON response:", text);
+                throw new Error("Assistant returned invalid data format.");
             }
 
             const data = await response.json();
-            const botText = data.output || "No response from AI.";
+            const botText = data.output || "No response generated.";
 
             setMessages((prev) => [
                 ...prev,
@@ -70,14 +82,14 @@ const Chatbot = () => {
                     sender: "bot",
                 },
             ]);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Chatbot Error:", error);
 
             setMessages((prev) => [
                 ...prev,
                 {
                     id: Date.now().toString(),
-                    text: "Unable to connect to AI server. Check webhook or CORS.",
+                    text: `Assistant: ${error.message || "Connection failed."}`,
                     sender: "bot",
                 },
             ]);

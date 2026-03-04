@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { formatDistanceToNow } from 'date-fns';
 import twilio from 'twilio';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
@@ -41,10 +40,6 @@ const TWILIO_FROM = process.env.TWILIO_FROM || "";
 const getTwilioClient = () => {
     return twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 };
-
-// Google Gemini Configuration
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // In-memory conversation history (volatile on serverless, but works for single session)
 const chatHistories: Record<string, any[]> = {};
@@ -173,7 +168,7 @@ app.post('/api/trigger-alert', async (req, res) => {
     }
 });
 
-// Chat Route — Direct Gemini API
+// Chat Route — n8n Webhook
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionId = "user123" } = req.body;
@@ -182,37 +177,56 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        // Initialize history if it doesn't exist
-        if (!chatHistories[sessionId]) {
-            chatHistories[sessionId] = [];
+        const webhookUrl = process.env.N8N_WEBHOOK_URL;
+        if (!webhookUrl) {
+            throw new Error("N8N_WEBHOOK_URL not configured");
         }
 
-        const chat = model.startChat({
-            history: chatHistories[sessionId],
-            generationConfig: {
-                maxOutputTokens: 500,
-            },
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatInput: message,
+                sessionId: sessionId
+            })
         });
 
-        const result = await chat.sendMessage(message);
-        const response = await result.response;
-        const text = response.text();
-
-        // Update history
-        chatHistories[sessionId].push(
-            { role: "user", parts: [{ text: message }] },
-            { role: "model", parts: [{ text: text }] }
-        );
-
-        if (chatHistories[sessionId].length > 10) {
-            chatHistories[sessionId] = chatHistories[sessionId].slice(-10);
+        if (!response.ok) {
+            throw new Error(`n8n responded with status ${response.status}`);
         }
 
-        res.json({ output: text });
+        const rawText = await response.text();
+
+        const jsonStrings = rawText.split(/\}\n?\{/);
+        let aggregatedOutput = "";
+
+        jsonStrings.forEach((s, i, arr) => {
+            try {
+                let str = s;
+                if (i > 0) str = '{' + str;
+                if (i < arr.length - 1) str = str + '}';
+                const obj = JSON.parse(str);
+
+                if (obj.type === 'item' && obj.content) {
+                    aggregatedOutput += obj.content;
+                } else if (obj.output || obj.text) {
+                    aggregatedOutput = obj.output || obj.text;
+                }
+            } catch (e) {
+                // Ignore parsing errors for partial/malformed chunks
+            }
+        });
+
+        const output = aggregatedOutput || (rawText.length > 0 ? "Processed raw response." : "No response generated.");
+
+        res.json({ output });
 
     } catch (error: any) {
-        console.error("❌ Gemini Error:", error.message);
-        res.status(500).json({ error: "Assistant currently offline.", details: error.message });
+        console.error("❌ Chatbot Error:", error.message);
+        res.status(500).json({
+            error: "Assistant currently offline.",
+            details: error.message
+        });
     }
 });
 

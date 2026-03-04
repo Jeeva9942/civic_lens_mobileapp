@@ -3,12 +3,18 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import twilio from 'twilio';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
-const app = express();
 const PORT = parseInt(process.env.PORT || "5000", 10);
+
+console.log("🛠️  Backend Environment Check:");
+console.log(` - Port: ${PORT}`);
+console.log(` - Supabase URL: ${process.env.SUPABASE_URL ? "✅ Loaded" : "❌ Missing"}`);
+console.log(` - n8n Webhook: ${process.env.N8N_WEBHOOK_URL ? "✅ Loaded" : "❌ Missing"}`);
+console.log(` - Twilio Config: ${process.env.TWILIO_ACCOUNT_SID ? "✅ Loaded" : "❌ Missing"}`);
+
+const app = express();
 
 // Middleware
 app.use(cors());
@@ -34,10 +40,6 @@ const TWILIO_FROM = process.env.TWILIO_FROM || "";
 
 const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
-// Google Gemini Configuration
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
 // In-memory conversation history
 const chatHistories: Record<string, any[]> = {};
 
@@ -55,9 +57,25 @@ app.get('/api/civic', async (req, res) => {
 
         if (error) throw error;
         res.json(items);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
         res.status(500).json({ error: 'Failed to fetch civic items' });
+    }
+});
+
+// Fetch all notifications
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('notifications')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err: any) {
+        console.error("❌ Notifications Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch notifications' });
     }
 });
 
@@ -71,7 +89,7 @@ app.post('/api/civic', async (req, res) => {
 
         if (error) throw error;
         res.status(201).json(data[0]);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
         res.status(400).json({ error: 'Failed to create civic item' });
     }
@@ -89,7 +107,7 @@ app.get('/api/civic/:id', async (req, res) => {
         if (error) throw error;
         if (!item) return res.status(404).json({ error: 'Item not found' });
         res.json(item);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
         res.status(500).json({ error: 'Internal server error' });
     }
@@ -107,7 +125,7 @@ app.put('/api/civic/:id', async (req, res) => {
         if (error) throw error;
         if (!updatedItem || updatedItem.length === 0) return res.status(404).json({ error: 'Item not found' });
         res.json(updatedItem[0]);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
         res.status(400).json({ error: 'Failed to update civic item' });
     }
@@ -123,7 +141,7 @@ app.delete('/api/civic/:id', async (req, res) => {
 
         if (error) throw error;
         res.json({ message: 'Item deleted successfully' });
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
         res.status(500).json({ error: 'Failed to delete civic item' });
     }
@@ -186,7 +204,7 @@ app.post('/api/trigger-alert', async (req, res) => {
     }
 });
 
-// Chat Route — Direct Gemini API
+// Chat Route — n8n Webhook
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionId = "user123" } = req.body;
@@ -195,38 +213,67 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        // Initialize history if it doesn't exist
-        if (!chatHistories[sessionId]) {
-            chatHistories[sessionId] = [];
+        const webhookUrl = process.env.N8N_WEBHOOK_URL;
+        if (!webhookUrl) {
+            console.error("❌ Chat Error: N8N_WEBHOOK_URL is missing in .env");
+            return res.status(500).json({ error: "Configuration Error", details: "N8N_WEBHOOK_URL not set." });
         }
 
-        const chat = model.startChat({
-            history: chatHistories[sessionId],
-            generationConfig: {
-                maxOutputTokens: 500,
-            },
+        console.log(`💬 Chat request: "${message}" -> n8n`);
+
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatInput: message,
+                sessionId: sessionId
+            })
         });
 
-        const result = await chat.sendMessage(message);
-        const response = await result.response;
-        const text = response.text();
-
-        // Update history
-        chatHistories[sessionId].push(
-            { role: "user", parts: [{ text: message }] },
-            { role: "model", parts: [{ text: text }] }
-        );
-
-        // Keep history manageable
-        if (chatHistories[sessionId].length > 20) {
-            chatHistories[sessionId] = chatHistories[sessionId].slice(-20);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`❌ n8n responded with error (${response.status}):`, errorText);
+            return res.status(response.status).json({
+                error: `n8n Error ${response.status}`,
+                details: errorText
+            });
         }
 
-        res.json({ output: text });
+        const rawText = await response.text();
+        console.log("✅ n8n response received, length:", rawText.length);
+
+        // n8n AI Agent often sends a stream of concatenated JSON objects
+        const jsonStrings = rawText.split(/\}\n?\{/);
+        let aggregatedOutput = "";
+
+        jsonStrings.forEach((s, i, arr) => {
+            try {
+                let str = s;
+                if (i > 0) str = '{' + str;
+                if (i < arr.length - 1) str = str + '}';
+                const obj = JSON.parse(str);
+
+                if (obj.type === 'item' && obj.content) {
+                    aggregatedOutput += obj.content;
+                } else if (obj.output || obj.text) {
+                    aggregatedOutput = obj.output || obj.text;
+                }
+            } catch (e: any) {
+                // Ignore parsing errors for partial/malformed chunks
+            }
+        });
+
+        const output = aggregatedOutput || (rawText.length > 0 ? "Processed raw response." : "No response generated.");
+        console.log("📝 Aggregated Response:", output.substring(0, 50) + "...");
+
+        res.json({ output });
 
     } catch (error: any) {
-        console.error("❌ Gemini Error:", error.message);
-        res.status(500).json({ error: "Civic Assistant is currently offline.", details: error.message });
+        console.error("❌ Chatbot Route Crash:", error);
+        res.status(500).json({
+            error: "Assistant currently offline.",
+            details: error.message || "Unknown error"
+        });
     }
 });
 

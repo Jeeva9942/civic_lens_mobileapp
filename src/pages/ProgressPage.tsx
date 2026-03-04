@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import {
     Sheet,
     SheetContent,
+    SheetHeader,
+    SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LanguageSelector from "@/components/LanguageSelector";
@@ -255,6 +257,9 @@ const ProgressPage = () => {
             {/* Detail Tracking Sheet */}
             <Sheet open={!!selectedIssue} onOpenChange={() => setSelectedIssue(null)}>
                 <SheetContent side="bottom" className="h-[85vh] rounded-t-[32px] border-t-0 p-0 overflow-hidden">
+                    <SheetHeader className="sr-only">
+                        <SheetTitle>Issue Tracking Details</SheetTitle>
+                    </SheetHeader>
                     {selectedIssue && (
                         <div className="flex flex-col h-full bg-background">
                             <div className="relative h-64 shrink-0">
